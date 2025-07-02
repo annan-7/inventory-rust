@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::State;
 use uuid::Uuid;
+use chrono;
 
 // Product struct for inventory
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -86,7 +87,7 @@ pub fn create_product(
         updated_at: now.clone(),
     };
     
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT INTO products (id, name, category, quantity, price, created_at, updated_at) 
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -107,7 +108,7 @@ pub fn create_product(
 
 #[tauri::command]
 pub fn get_products(db: State<DbState>) -> Result<Vec<Product>, String> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, category, quantity, price, created_at, updated_at 
                  FROM products ORDER BY created_at DESC")
@@ -134,7 +135,7 @@ pub fn get_products(db: State<DbState>) -> Result<Vec<Product>, String> {
 
 #[tauri::command]
 pub fn get_one_product(id: String, db: State<DbState>) -> Result<Product, String> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, category, quantity, price, created_at, updated_at 
                  FROM products WHERE id = ?1")
@@ -158,8 +159,11 @@ pub fn get_one_product(id: String, db: State<DbState>) -> Result<Product, String
 }
 
 #[tauri::command]
-pub fn get_products_by_category(category: String, db: State<DbState>) -> Result<Vec<Product>, String> {
-    let conn = db.conn.lock().unwrap();
+pub fn get_products_by_category(
+    category: String, 
+    db: State<DbState>
+) -> Result<Vec<Product>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, category, quantity, price, created_at, updated_at 
                  FROM products WHERE category = ?1 ORDER BY name")
@@ -186,7 +190,7 @@ pub fn get_products_by_category(category: String, db: State<DbState>) -> Result<
 
 #[tauri::command]
 pub fn get_categories(db: State<DbState>) -> Result<Vec<Category>, String> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT category, COUNT(*) as count FROM products GROUP BY category ORDER BY count DESC")
         .map_err(|e| format!("Failed to prepare query: {}", e))?;
@@ -215,7 +219,7 @@ pub fn update_product(
     db: State<DbState>
 ) -> Result<(), String> {
     let now = chrono::Utc::now().to_rfc3339();
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let result = conn.execute(
         "UPDATE products 
         SET name = ?1, category = ?2, quantity = ?3, price = ?4, updated_at = ?5 
@@ -232,15 +236,18 @@ pub fn update_product(
 }
 
 #[tauri::command]
-pub fn delete_product(id: String, db: State<DbState>) -> Result<(), String> {
-    let conn = db.conn.lock().unwrap();
-    let deleted = conn.execute(
+pub fn delete_product(
+    id: String, 
+    db: State<DbState>
+) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let result = conn.execute(
         "DELETE FROM products WHERE id = ?1", 
         params![id]
     )
     .map_err(|e| format!("Failed to delete product: {}", e))?;
     
-    if deleted == 0 {
+    if result == 0 {
         Err("Product not found".to_string())
     } else {
         Ok(())
